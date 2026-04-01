@@ -1,7 +1,23 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 from glb_processor import extract_properties, extract_textures
 from openai_utils import openai_3DEditor
+
+def local_gltf_viewer(model_filename):
+    model_path = f"3DEditor/objects/{model_filename}"
+
+    render_html = f"""
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+    <model-viewer 
+        src="{model_path}" 
+        camera-controls 
+        auto-rotate 
+        shadow-intensity="1" 
+        style="width: 100%; height: 500px; background-color: #262730;">
+    </model-viewer>
+    """
+    components.html(render_html, height=520)
 
 st.title("Active 3D Editor 🛠️")
 
@@ -34,3 +50,12 @@ if uploaded_file:
             
             st.balloons()
             st.success(f"{result_msg}{result_path}")
+
+            st.title("Local 3D Model Viewer")
+
+            st.title("Original 3D Model")
+            local_gltf_viewer(f"{uploaded_file.name}")
+
+            st.title("Updated 3D Model")
+            local_gltf_viewer(f"updated_{uploaded_file.name}")
+

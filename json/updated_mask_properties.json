@@ -1,1 +1,1 @@
-{"materialProperties":{"roughness":0.8,"metallic":0.5,"baseColor":[1,1,1],"normalMap":"normal_map.png","emissiveMap":"emissive_map.png"}}
+{"mask_properties":{"material":{"roughness":0.8,"color":"#ffffff","metallic":0.5},"texture":{"normal_map":"normal_map.png","roughness_map":"roughness_map.png"}}}
