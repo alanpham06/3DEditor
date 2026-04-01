@@ -1,0 +1,80 @@
+{
+    "model_metadata": {
+        "extensions": {},
+        "extras": {},
+        "generator": "Khronos glTF Blender I/O v5.1.1",
+        "copyright": null,
+        "version": "2.0",
+        "minVersion": null
+    },
+    "objects": [
+        {
+            "node_name": "Python_Helmet",
+            "transformation": {
+                "translation": null,
+                "rotation": [
+                    0.5891411900520325,
+                    0.0,
+                    0.0020557648967951536,
+                    0.8080276250839233
+                ],
+                "scale": [
+                    1.9999998807907104,
+                    2.0,
+                    2.0
+                ]
+            },
+            "dimensions": {
+                "min": [
+                    -0.9474585652351379,
+                    -1.18715500831604,
+                    -0.9009949564933777
+                ],
+                "max": [
+                    0.9424954056739807,
+                    0.8128451108932495,
+                    0.900973916053772
+                ]
+            }
+        }
+    ],
+    "materials": [
+        {
+            "name": "Material_MR",
+            "properties": {
+                "base_color": [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "roughness": 0.20000000298023224,
+                "metallic": 1.0,
+                "emissive_factor": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "double_sided": false
+            },
+            "texture_maps": {
+                "albedo": {
+                    "image_name": "Image_0",
+                    "mime_type": "image/png"
+                },
+                "normal": {
+                    "image_name": "Image_4",
+                    "mime_type": "image/jpeg"
+                },
+                "emissive": {
+                    "image_name": "Image_2",
+                    "mime_type": "image/jpeg"
+                },
+                "occlusion_metallic_roughness": {
+                    "image_name": "Image_3-Image_1",
+                    "mime_type": "image/png"
+                }
+            }
+        }
+    ]
+}

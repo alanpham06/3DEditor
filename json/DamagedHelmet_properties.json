@@ -1,0 +1,76 @@
+{
+    "model_metadata": {
+        "extensions": {},
+        "extras": {},
+        "generator": "Khronos Blender glTF 2.0 exporter",
+        "copyright": null,
+        "version": "2.0",
+        "minVersion": null
+    },
+    "objects": [
+        {
+            "node_name": "node_damagedHelmet_-6514",
+            "transformation": {
+                "translation": null,
+                "rotation": [
+                    0.7071068286895752,
+                    0.0,
+                    0.0,
+                    0.7071068286895752
+                ],
+                "scale": null
+            },
+            "dimensions": {
+                "min": [
+                    -0.9474585652351379,
+                    -1.18715500831604,
+                    -0.9009949564933777
+                ],
+                "max": [
+                    0.9424954056739807,
+                    0.8128451108932495,
+                    0.900973916053772
+                ]
+            }
+        }
+    ],
+    "materials": [
+        {
+            "name": "Material_MR",
+            "properties": {
+                "base_color": [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "roughness": 1.0,
+                "metallic": 1.0,
+                "emissive_factor": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "double_sided": false
+            },
+            "texture_maps": {
+                "albedo": {
+                    "image_name": null,
+                    "mime_type": "image/jpeg"
+                },
+                "normal": {
+                    "image_name": null,
+                    "mime_type": "image/jpeg"
+                },
+                "emissive": {
+                    "image_name": null,
+                    "mime_type": "image/jpeg"
+                },
+                "occlusion_metallic_roughness": {
+                    "image_name": null,
+                    "mime_type": "image/jpeg"
+                }
+            }
+        }
+    ]
+}

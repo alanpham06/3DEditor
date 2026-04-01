@@ -1,0 +1,59 @@
+{
+    "model_metadata": {
+        "extensions": {},
+        "extras": {},
+        "generator": "Khronos glTF Blender I/O v5.1.1",
+        "copyright": null,
+        "version": "2.0",
+        "minVersion": null
+    },
+    "objects": [
+        {
+            "node_name": "Cube",
+            "transformation": {
+                "translation": null,
+                "rotation": null,
+                "scale": null
+            },
+            "dimensions": {
+                "min": [
+                    -1.0,
+                    -1.0,
+                    -1.0
+                ],
+                "max": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            }
+        }
+    ],
+    "materials": [
+        {
+            "name": "Material",
+            "properties": {
+                "base_color": [
+                    0.054500482976436615,
+                    0.3017265498638153,
+                    0.8000074625015259,
+                    1.0
+                ],
+                "roughness": 0.5,
+                "metallic": 0.0,
+                "emissive_factor": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "double_sided": true
+            },
+            "texture_maps": {
+                "albedo": null,
+                "normal": null,
+                "emissive": null,
+                "occlusion_metallic_roughness": null
+            }
+        }
+    ]
+}
