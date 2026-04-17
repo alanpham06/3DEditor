@@ -1,122 +1,339 @@
-import os 
-import json
-import base64
 from openai import OpenAI
 from dotenv import load_dotenv
-from pygltflib import GLTF2
+import json
+import os
 
-# Loads the OpenAI API key from the .env file for security purposes
-load_dotenv()
-
-def encode_image_to_base64(image_path):
-    """Helper to convert images for the AI to process"""
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode('utf-8')
-
-# Initialize the OpenAI client
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
+from glb_processor import (
+    extract_scene_state,
+    inspect_glb,    
+    process_parameter_edits
 )
 
 
-def openai_3DEditor(user_request, original_glb_path, json_metadata, texture_paths=None, output_folder="objects"):
-    """
-    1. Sends Text + JSON + Images to GPT-4o.
-    2. Receives modified JSON instructions.
-    3. Rebuilds the .glb with the changes.
-    """
-    os.makedirs(output_folder, exist_ok=True)
-    
-    # 1. Build the Multimodal Message (Text + JSON + Images)
-    system_prompt = """
-    You are a 3D model configuration editor.
-    You will receive a JSON object. You must return the EXACT same JSON structure.
-    Do not change keys, do not change hierarchy, and do not remove sections. 
-    ONLY update the specific values requested by the user.
-    Ouput must be a valid JSON.
-    """
+# Loads the OpenAI API key from the .env file for security purposes
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    content = [
-        {
-            "type": "text", 
-            "text": (
-                f"User Request: {user_request}\n"
-                f"Reference JSON to modify: {json.dumps(json_metadata, indent=2)}\n"
-            )
+def build_model_scene_view(scene_state):
+    editable_targets = []
+
+    for material in scene_state.get("materials", []):
+        editable_targets.append({
+            "id": material["id"],
+            "kind": "material",
+            "name": material.get("name"),
+            "allowed_properties": list(material.get("editable", {}).keys()),
+            "current_values": material.get("editable", {})
+        })
+
+    for node in scene_state.get("nodes", []):
+        editable_targets.append({
+            "id": node["id"],
+            "kind": "node",
+            "name": node.get("name"),
+            "allowed_properties": list(node.get("editable", {}).keys()),
+            "current_values": node.get("editable", {})
+        })
+
+    return {
+        "editable_targets": editable_targets
+    }
+
+
+def build_session_context(edit_history):
+    if not edit_history:
+        return {
+            "has_prior_edits": False,
+            "entries": []
         }
-    ]
 
-    # Add images if provided
-    if texture_paths:
-        for path in texture_paths:
-            if os.path.exists(path):
-                b64_img = encode_image_to_base64(path)
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{b64_img}"}
-                })
+    history_entries = []
+    for entry in edit_history[-10:]:
+        history_entries.append({
+            "step": entry.get("step"),
+            "user_request": entry.get("request"),
+            "summary": entry.get("summary", {}),
+            "applied_operations": entry.get("applied_operations", [])
+        })
 
-    # 2. Call OpenAI
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        response_format={ "type": "json_object"},
-        messages=[{"role": "system", "content": system_prompt},
-                  {"role": "user", "content": content}],
-        temperature=0.2 # Lower temperature for structural accuracy
+    return {
+        "has_prior_edits": True,
+        "entries": history_entries
+    }
+
+def convert_model_output_to_edit_plan(model_output):
+    operations = []
+
+    for op in model_output.get("operations", []):
+        value_fields = [
+            op.get("value_number", None) is not None,
+            op.get("value_bool", None) is not None,
+            op.get("value_array", None) is not None,
+        ]
+
+        if sum(value_fields) != 1:
+            raise ValueError(
+                f"Operation must set exactly one value field: {op}"
+            )
+
+        if op.get("value_number", None) is not None:
+            value = op["value_number"]
+        elif op.get("value_bool", None) is not None:
+            value = op["value_bool"]
+        else:
+            value = op["value_array"]
+
+        operations.append({
+            "op": op["op"],
+            "target_id": op["target_id"],
+            "property": op["property"],
+            "value": value
+        })
+
+    return {
+        "operations": operations
+    }
+
+EDIT_PLAN_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "name": "scene_edit_plan",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "operations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "op": {
+                            "type": "string",
+                            "enum": [
+                                "set_material_property",
+                                "set_node_transform"
+                            ]
+                        },
+                        "target_id": {"type": "string"},
+                        "property": {
+                            "type": "string",
+                            "enum": [
+                                "base_color",
+                                "roughness",
+                                "metallic",
+                                "emissive_factor",
+                                "double_sided",
+                                "translation",
+                                "rotation",
+                                "scale"
+                            ]
+                        },
+                        "value_number": {
+                            "type": ["number", "null"]
+                        },
+                        "value_bool": {
+                            "type": ["boolean", "null"]
+                        },
+                        "value_array": {
+                            "type": ["array", "null"],
+                            "items": {"type": "number"}
+                        },
+                        "rationale": {
+                            "type": ["string", "null"]
+                        }
+                    },
+                    "required": [
+                        "op",
+                        "target_id",
+                        "property",
+                        "value_number",
+                        "value_bool",
+                        "value_array",
+                        "rationale"
+                    ],
+                    "additionalProperties": False
+                }
+            }
+        },
+        "required": ["operations"],
+        "additionalProperties": False
+    },
+    "strict": True
+}
+
+def request_edit_plan_from_openai(
+    user_request,
+    scene_state,
+    edit_history=None,
+    model="gpt-5.4-mini"
+):
+    model_scene_view = build_model_scene_view(scene_state)
+    session_context = build_session_context(edit_history or [])
+
+    system_prompt = """
+You are a 3D parameter edit planner.
+
+Your job is to convert a user request into a valid edit plan.
+
+Rules:
+- Return only operations supported by the schema.
+- Use only the provided target IDs.
+- Use only supported properties for each target.
+- Do not invent targets.
+- Do not describe textures, geometry changes, or new assets.
+- Only produce parameter edits for:
+  - materials: base_color, roughness, metallic, emissive_factor, double_sided
+  - nodes: translation, rotation, scale
+- For base_color use 4 floats.
+- For emissive_factor use 3 floats.
+- For translation use 3 floats.
+- For rotation use 4 floats.
+- For scale use 3 floats.
+- Populate exactly one of:
+  - value_number
+  - value_bool
+  - value_array
+- The provided scene describes the current GLB state after any earlier edits.
+- If session history is present, treat those earlier edits as already applied.
+- Build on prior edits unless the user explicitly asks to undo or replace them.
+- If the request cannot be expressed with supported parameter edits, return:
+  { "operations": [] }
+"""
+
+    user_payload = {
+        "user_request": user_request,
+        "scene": model_scene_view,
+        "session_history": session_context
+    }
+
+    response = client.responses.create(
+        model=model,
+        input=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": json.dumps(user_payload, indent=2)
+            }
+        ],
+        text={
+            "format": EDIT_PLAN_RESPONSE_FORMAT
+        }
     )
 
-    # 3. Grab the message object first
-    message = response.choices[0].message
+    raw_text = response.output_text
+    if not raw_text:
+        raise ValueError("Model returned empty structured output.")
 
-    # 4. Check if there is actually content before stripping
-    if message.content:
-        raw_ai_output = message.content.strip()
-    else:
-        # This will tell you if the AI refused to answer or just errored out
-        print(f"Debug: Refusal reason: {getattr(message, 'refusal', 'Unknown')}")
-        raise ValueError("The AI returned an empty response. Check your prompt!")
+    model_output = json.loads(raw_text)
+    edit_plan = convert_model_output_to_edit_plan(model_output)
 
-    output_path = f"json/updated_mask_properties.json" 
-    with open(output_path, "w") as f:
-        f.write(raw_ai_output)
-    
-    # Clean up accidental markdown if the AI includes it
-    if raw_ai_output.startswith("```json"):
-        raw_ai_output = raw_ai_output.replace("```json", "").replace("```", "").strip()
+    return {
+        "model_output": model_output,
+        "edit_plan": edit_plan
+    }
 
-    try:
 
-        updated_json_dict = json.loads(raw_ai_output)
-        
-        # 1. Load the ORIGINAL binary GLB (this keeps your 3D mesh safe)
-        gltf = GLTF2().load(original_glb_path)
-        
-        # 2. Extract the new values from the AI's dictionary
-        # Note: We use .get() to avoid crashing if the AI missed a key
-        ai_material = updated_json_dict.get("materials", [{}])[0]
-        ai_props = ai_material.get("properties", {})
-        
-        new_metallic = ai_props.get("metallic", 1.0)
-        new_roughness = ai_props.get("roughness", 0.5)
+def apply_edit_plan_to_glb(
+    base_glb_path,
+    output_path,
+    edit_plan,
+):
+    scene_state = extract_scene_state(base_glb_path)
 
-        # 3. MANUALLY apply them to the first material in the actual model
-        if gltf.materials:
-            mat = gltf.materials[0]
-            if mat.pbrMetallicRoughness:
-                # GLTF uses 'metallicFactor' and 'roughnessFactor'
-                mat.pbrMetallicRoughness.metallicFactor = float(new_metallic)
-                mat.pbrMetallicRoughness.roughnessFactor = float(new_roughness)
-                
-                print(f"Applied Metallic: {new_metallic}")
+    process_result = process_parameter_edits(
+        original_glb_path=base_glb_path,
+        scene_state=scene_state,
+        edit_plan=edit_plan,
+        output_path=output_path
+    )
 
-        # 4. Save the model
-        output_filename = f"updated_{os.path.basename(original_glb_path)}"
-        final_path = os.path.join(output_folder, output_filename)
-        gltf.save(final_path)
-        
-        return final_path
+    updated_scene_state = extract_scene_state(output_path)
 
-    except json.JSONDecodeError:
-        print("Error: AI returned invalid JSON. Check the output text.")
-        print(f"Raw Output: {raw_ai_output}")
-        return None
+    return {
+        "base_glb_path": base_glb_path,
+        "updated_glb_path": output_path,
+        "scene_state": scene_state,
+        "updated_scene_state": updated_scene_state,
+        "edit_plan": edit_plan,
+        "process_result": process_result,
+        "saved_glb": inspect_glb(output_path)
+    }
+
+def openai_parameter_edit_pipeline(
+    user_request,
+    original_glb_path,
+    output_path,
+    edit_history=None,
+    model="gpt-5.4-mini"
+):
+    scene_state = extract_scene_state(original_glb_path)
+
+    planning_result = request_edit_plan_from_openai(
+        user_request=user_request,
+        scene_state=scene_state,
+        edit_history=edit_history,
+        model=model
+    )
+
+    apply_result = apply_edit_plan_to_glb(
+        base_glb_path=original_glb_path,
+        output_path=output_path,
+        edit_plan=planning_result["edit_plan"],
+    )
+    apply_result["user_request"] = user_request
+    apply_result["model_output"] = planning_result["model_output"]
+    return apply_result
+
+def generate_updated_glb_for_viewer(
+    user_request,
+    original_glb_path,
+    output_glb_path,
+    edit_history=None,
+    model="gpt-5.4-mini"
+):
+    # 1. Extract current editable scene state from the real GLB
+    scene_state = extract_scene_state(original_glb_path)
+
+    # 2. Ask OpenAI for a structured edit plan
+    planning_result = request_edit_plan_from_openai(
+        user_request=user_request,
+        scene_state=scene_state,
+        edit_history=edit_history,
+        model=model
+    )
+
+    # 3. Apply the edit plan back into the real GLB and save it
+    apply_result = apply_edit_plan_to_glb(
+        base_glb_path=original_glb_path,
+        output_path=output_glb_path,
+        edit_plan=planning_result["edit_plan"],
+    )
+    apply_result["model_output"] = planning_result["model_output"]
+    return apply_result
+
+def run_openai_integration_test():
+    original_glb = "objects/mask.glb"
+    output_glb = "objects/updated_mask_openai.glb"
+
+    result = openai_parameter_edit_pipeline(
+        user_request="Make the helmet more metallic, slightly smoother, and scale it up by about 10 percent.",
+        original_glb_path=original_glb,
+        output_path=output_glb,
+        model="gpt-5.4-mini"
+    )
+
+    print("MODEL OUTPUT")
+    print(json.dumps(result["model_output"], indent=2))
+
+    print("NORMALIZED EDIT PLAN")
+    print(json.dumps(result["edit_plan"], indent=2))
+
+    print("PROCESS RESULT")
+    print(json.dumps(result["process_result"], indent=2))
+
+    print("SAVED GLB INSPECTION")
+    print(json.dumps(result["saved_glb"], indent=2))
+
+if __name__ == "__main__":
+    run_openai_integration_test()

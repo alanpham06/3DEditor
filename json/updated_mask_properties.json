@@ -1,1 +1,1 @@
-{"mask_properties":{"material":{"roughness":0.8,"color":"#ffffff","metallic":0.5},"texture":{"normal_map":"normal_map.png","roughness_map":"roughness_map.png"}}}
+{"mask_properties": {"material": {"roughness": 0.8, "color": "#FFFFFF", "metallic": 0.5}, "texture": {"diffuse": "textures/mask_diffuse.png", "normal": "textures/mask_normal.png", "roughness": "textures/mask_roughness.png"}}}
